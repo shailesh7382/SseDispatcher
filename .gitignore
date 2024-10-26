@@ -1,2 +1,4 @@
 /.idea/
 /target/
+/ss-dispatcher-server/target/
+/sse-dispatcher-client/target/
