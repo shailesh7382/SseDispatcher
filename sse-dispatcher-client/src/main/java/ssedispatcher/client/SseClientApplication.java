@@ -11,10 +11,15 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+
 @SpringBootApplication
 public class SseClientApplication implements CommandLineRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(SseClientApplication.class);
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10, new CustomThreadFactory("SseClientScheduler"));
 
     public static void main(String[] args) {
         SpringApplication.run(SseClientApplication.class, args);
@@ -42,5 +47,21 @@ public class SseClientApplication implements CommandLineRunner {
     @Bean
     public WebServerFactoryCustomizer<TomcatServletWebServerFactory> customizer() {
         return factory -> factory.setPort(8081);
+    }
+
+    private static class CustomThreadFactory implements ThreadFactory {
+        private final String namePrefix;
+        private int threadNumber = 1;
+
+        CustomThreadFactory(String namePrefix) {
+            this.namePrefix = namePrefix;
+        }
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, namePrefix + "-thread-" + threadNumber++);
+            t.setDaemon(true);
+            return t;
+        }
     }
 }
