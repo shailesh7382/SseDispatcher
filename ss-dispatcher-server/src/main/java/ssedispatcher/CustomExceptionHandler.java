@@ -26,6 +26,11 @@ public class CustomExceptionHandler extends ResponseEntityExceptionHandler {
         // Log the exception
         logger.error("Async request timed out", ex);
 
+        // Ensure headers is not null
+        if (headers == null) {
+            headers = new HttpHeaders();
+        }
+
         // Create a custom error response
         ErrorResponse errorResponse = new ErrorResponse("Request timed out", "The server took too long to respond.");
 

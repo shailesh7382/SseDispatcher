@@ -62,8 +62,11 @@ public class SseEmitterHelper {
             SseEmitter emitter = userEmitters.get(userId);
             try {
                 customHttp2Metrics.incrementStreams();
-                emitter.send(SseEmitter.event().name("price-update").data("Bid: " + bid + ", Ask: " + ask));
-                logger.info("Sent price update to user: {}", userId);
+                String jsonData = "{\"bid\": " + bid + ", \"ask\": " + ask + "}";
+//                String message = "data: " + jsonData + "\n\n";
+
+                emitter.send(SseEmitter.event()./*name("price-update").*/data(jsonData));
+                logger.info("{} -> {}", userId, jsonData);
             } catch (IOException e) {
                 customHttp2Metrics.decrementStreams();
                 emitter.completeWithError(e);
