@@ -39,32 +39,50 @@ Instead, it will copy all the configuration files and the transitive dependencie
 
 You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
 
-## Learn More
+# Price Ticker
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+The `PriceTicker` module is a React component that displays real-time EUR/USD price updates using Server-Sent Events (SSE). It includes features for subscribing to price updates, handling reconnection with exponential backoff, and providing UI feedback during reconnection attempts. Below is a detailed description of the module:
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### Imports
+- **React**: Core library for building the component.
+- **Material-UI Components**: Various UI components like `Container`, `Typography`, `Alert`, `TextField`, `Button`, `FormHelperText`, `Card`, `CardContent`, `Grid`, `Paper`, and `CircularProgress`.
+- **makeStyles**: A utility from Material-UI for creating custom styles.
+- **Bootstrap**: For additional styling.
 
-### Code Splitting
+### Styles
+- **useStyles**: A hook that defines custom styles for various elements in the component, such as helper text, positive/negative price changes, cards, notes panel, reconnect row, and spinner.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+### State Variables
+- **price**: Holds the current bid and ask prices.
+- **prevPrice**: Holds the previous bid and ask prices for comparison.
+- **error**: Stores any error messages.
+- **userId**: Stores the user ID entered by the user.
+- **subscribed**: Indicates whether the user is subscribed to price updates.
+- **connectionClosed**: Indicates whether the SSE connection is closed.
+- **ticks**: Counts the number of price updates received.
+- **startTime**: Records the start time of the connection.
+- **reconnectAttempts**: Counts the number of reconnection attempts.
+- **isReconnecting**: Indicates whether the component is currently attempting to reconnect.
 
-### Analyzing the Bundle Size
+### Helper Functions
+- **delay**: Returns a promise that resolves after a specified time, used for implementing exponential backoff.
+- **getCardClass**: Determines the CSS class for price cards based on whether the price has increased or decreased.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### Main Functions
+- **createEventSource**: Establishes the SSE connection, handles incoming messages, and manages reconnection attempts with exponential backoff.
+- **handleSubscribe**: Initiates the subscription to price updates by calling `createEventSource`.
 
-### Making a Progressive Web App
+### useEffect Hook
+- Ensures that the SSE connection is closed when the component unmounts to prevent memory leaks.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+### JSX Structure
+- **Container**: Wraps the entire component.
+- **Typography**: Displays the title.
+- **TextField**: Allows the user to enter their user ID.
+- **Button**: Subscribes the user to price updates.
+- **Grid**: Displays the bid and ask prices in cards.
+- **Alert**: Shows error messages.
+- **Paper**: Displays additional information like update speed.
+- **Reconnect Button**: Allows the user to manually reconnect if the connection is closed.
 
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+#

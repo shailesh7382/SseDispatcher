@@ -15,6 +15,7 @@
     <modules>
         <module>ss-dispatcher-server</module>
         <module>sse-dispatcher-client</module>
+        <module>sse-dispatcher-client-ui</module>
     </modules>
     <properties>
         <java.version>11</java.version>

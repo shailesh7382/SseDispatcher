@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Container, Typography, Alert, TextField, Button, FormHelperText, Card, CardContent, Grid, Paper } from '@mui/material';
+import { Container, Typography, Alert, TextField, Button, FormHelperText, Card, CardContent, Grid, Paper, CircularProgress } from '@mui/material';
 import { makeStyles } from '@mui/styles';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import config from './config';
 
+// Define custom styles using Material-UI's makeStyles
 const useStyles = makeStyles(() => ({
     helperText: {
         fontSize: '0.75rem',
@@ -40,6 +42,15 @@ const useStyles = makeStyles(() => ({
         marginTop: '16px',
         textAlign: 'center',
     },
+    spinner: {
+        marginLeft: '8px',
+    },
+    buttonContainer: {
+        marginTop: '16px', // Push the button panel down
+    },
+    button: {
+        marginRight: '8px', // Add space between buttons
+    },
 }));
 
 const PriceTicker = () => {
@@ -53,10 +64,15 @@ const PriceTicker = () => {
     const [ticks, setTicks] = useState(0);
     const [startTime, setStartTime] = useState(Date.now());
     const [reconnectAttempts, setReconnectAttempts] = useState(0);
+    const [isReconnecting, setIsReconnecting] = useState(false);
     const eventSourceRef = useRef(null);
 
-    const createEventSource = () => {
-        const eventSource = new EventSource(`http://localhost:8080/stream-sse?userId=${userId}`);
+    // Helper function to create a delay
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    // Function to create and manage the EventSource connection
+    const createEventSource = async () => {
+        const eventSource = new EventSource(`${config.sseUrl}?userId=${userId}`);
         eventSourceRef.current = eventSource;
 
         eventSource.onopen = () => {
@@ -65,6 +81,7 @@ const PriceTicker = () => {
             setStartTime(Date.now());
             setTicks(0);
             setReconnectAttempts(0); // Reset reconnection attempts on successful connection
+            setIsReconnecting(false);
         };
 
         eventSource.onmessage = (event) => {
@@ -86,21 +103,33 @@ const PriceTicker = () => {
             }
         };
 
-        eventSource.onerror = (err) => {
+        eventSource.onerror = async (err) => {
             console.error('EventSource failed -> ', err);
             try {
                 const errorData = JSON.parse(err.data);
                 console.error('error :', errorData);
                 setError(errorData.message || 'EventSource failed.');
             } catch (e) {
-                setError('EventSource failed: ' + err   );
+                setError('EventSource failed: ' + err);
             }
             setConnectionClosed(true);
             eventSource.close();
             eventSourceRef.current = null;
+
+            if (reconnectAttempts < config.maxReconnectAttempts) {
+                setIsReconnecting(true);
+                const delayTime = Math.pow(2, reconnectAttempts) * config.reconnectBaseDelay; // Exponential backoff
+                await delay(delayTime);
+                setReconnectAttempts(reconnectAttempts + 1);
+                createEventSource();
+            } else {
+                setError('Maximum reconnection attempts reached.');
+                setIsReconnecting(false);
+            }
         };
     };
 
+    // Function to handle subscription to price updates
     const handleSubscribe = () => {
         if (userId.trim() !== '') {
             setSubscribed(true);
@@ -108,25 +137,25 @@ const PriceTicker = () => {
         }
     };
 
-    const handleReconnect = () => {
-        if (reconnectAttempts < 3) {
-            setReconnectAttempts(reconnectAttempts + 1);
-            setSubscribed(false);
-            setSubscribed(true);
-            createEventSource();
-        } else {
-            setError('Maximum reconnection attempts reached.');
-        }
-    };
-
+    // Function to determine the CSS class for price cards
     const getCardClass = (current, previous) => {
         if (current > previous) return classes.positive;
         if (current < previous) return classes.negative;
         return '';
     };
 
+    // Calculate elapsed time and ticks per second
     const elapsedTime = (Date.now() - startTime) / 1000; // in seconds
     const ticksPerSecond = (ticks / elapsedTime).toFixed(2);
+
+    // Cleanup EventSource on component unmount
+    useEffect(() => {
+        return () => {
+            if (eventSourceRef.current) {
+                eventSourceRef.current.close();
+            }
+        };
+    }, []);
 
     return (
         <Container>
@@ -149,25 +178,28 @@ const PriceTicker = () => {
                     User name is required
                 </FormHelperText>
             )}
-            <Button
-                variant="contained"
-                color="primary"
-                onClick={handleSubscribe}
-                disabled={subscribed || userId.trim() === ''}
-                className="font-weight-bold"
-            >
-                Subscribe
-            </Button>
-            {connectionClosed && (
+            <div className={classes.buttonContainer}>
                 <Button
                     variant="contained"
-                    color="secondary"
-                    onClick={handleReconnect}
-                    className="font-weight-bold"
+                    color="primary"
+                    onClick={handleSubscribe}
+                    disabled={subscribed || userId.trim() === ''}
+                    className={`${classes.button} font-weight-bold`}
                 >
-                    Reconnect
+                    Subscribe
                 </Button>
-            )}
+                {connectionClosed && (
+                    <Button
+                        variant="contained"
+                        color="secondary"
+                        onClick={createEventSource}
+                        className={`${classes.button} font-weight-bold`}
+                    >
+                        Reconnect
+                        {isReconnecting && <CircularProgress size={20} className={classes.spinner} />}
+                    </Button>
+                )}
+            </div>
             <Grid container justifyContent="center">
                 <Card className={`${classes.card} ${getCardClass(price.bid, prevPrice.bid)}`}>
                     <CardContent className={classes.cardContent}>
