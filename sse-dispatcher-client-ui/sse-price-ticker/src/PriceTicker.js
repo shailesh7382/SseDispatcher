@@ -1,8 +1,13 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { Container, Typography, Alert, TextField, Button, FormHelperText, Card, CardContent, Grid, Paper, CircularProgress } from '@mui/material';
-import { makeStyles } from '@mui/styles';
+import React, {useEffect, useState, useRef} from 'react';
+import {Container, Typography, Alert, TextField, Button, FormHelperText, CircularProgress, Paper} from '@mui/material';
+import {makeStyles} from '@mui/styles';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import {AgGridReact} from 'ag-grid-react';
+import 'ag-grid-community/styles/ag-grid.css';
+import 'ag-grid-community/styles/ag-theme-alpine.css';
 import config from './config';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
 // Define custom styles using Material-UI's makeStyles
 const useStyles = makeStyles(() => ({
@@ -15,20 +20,6 @@ const useStyles = makeStyles(() => ({
     },
     negative: {
         backgroundColor: 'lightcoral',
-    },
-    card: {
-        minWidth: 150,
-        textAlign: 'center',
-        margin: '8px',
-    },
-    cardContent: {
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-    },
-    price: {
-        fontSize: '1.5rem',
-        fontWeight: 'bold',
     },
     notesPanel: {
         marginTop: '16px',
@@ -51,12 +42,15 @@ const useStyles = makeStyles(() => ({
     button: {
         marginRight: '8px', // Add space between buttons
     },
+    icon: {
+        verticalAlign: 'middle',
+    },
 }));
 
 const PriceTicker = () => {
     const classes = useStyles();
-    const [price, setPrice] = useState({ bid: 0, ask: 0 });
-    const [prevPrice, setPrevPrice] = useState({ bid: 0, ask: 0 });
+    const [prices, setPrices] = useState({});
+    const [prevPrices, setPrevPrices] = useState({});
     const [error, setError] = useState('');
     const [userId, setUserId] = useState('');
     const [subscribed, setSubscribed] = useState(false);
@@ -91,11 +85,22 @@ const PriceTicker = () => {
                 if (data.error) {
                     setError(data.message);
                 } else {
-                    const bid = parseFloat(data.bid);
-                    const ask = parseFloat(data.ask);
-                    console.log(`Parsed bid: ${bid}, ask: ${ask}`);
-                    setPrevPrice(price);
-                    setPrice({ bid, ask });
+                    const {bid, ask, ccyPair} = data;
+                    console.log(`Parsed bid: ${bid}, ask: ${ask}, ccyPair: ${ccyPair}`);
+
+                    setPrevPrices((prev) => {
+                        const newPrevPrices = {...prev};
+                        newPrevPrices[ccyPair] = prices[ccyPair] || {bid: 0, ask: 0};
+                        return newPrevPrices;
+                    });
+
+                    setPrices((prev) => ({
+                        ...prev,
+                        [ccyPair]: {bid, ask}
+                    }));
+
+                    console.log('Previous prices:', prevPrices);
+                    console.log('current prices:', prices);
                     setTicks((prevTicks) => prevTicks + 1);
                 }
             } catch (e) {
@@ -137,13 +142,6 @@ const PriceTicker = () => {
         }
     };
 
-    // Function to determine the CSS class for price cards
-    const getCardClass = (current, previous) => {
-        if (current > previous) return classes.positive;
-        if (current < previous) return classes.negative;
-        return '';
-    };
-
     // Calculate elapsed time and ticks per second
     const elapsedTime = (Date.now() - startTime) / 1000; // in seconds
     const ticksPerSecond = (ticks / elapsedTime).toFixed(2);
@@ -157,10 +155,52 @@ const PriceTicker = () => {
         };
     }, []);
 
+    // Define columns for ag-Grid
+    const columns = [
+        {headerName: 'Currency Pair', field: 'ccyPair'},
+        {
+            headerName: 'Bid',
+            field: 'bid',
+            cellClass: (params) => getCardClass(params.value, prevPrices[params.data.ccyPair]?.bid)
+        },
+        {
+            headerName: 'Ask',
+            field: 'ask',
+            cellClass: (params) => getCardClass(params.value, prevPrices[params.data.ccyPair]?.ask)
+        },
+        {headerName: 'Change', field: 'change', cellRenderer: 'changeRenderer'},
+    ];
+
+    // Prepare row data for ag-Grid
+    const rowData = Object.keys(prices).map((ccyPair) => ({
+        ccyPair,
+        bid: prices[ccyPair].bid.toFixed(4),
+        ask: prices[ccyPair].ask.toFixed(4),
+        change: prices[ccyPair].bid - (prevPrices[ccyPair]?.bid || 0),
+    }));
+
+    // Function to determine the CSS class for price cells
+    const getCardClass = (current, previous) => {
+        if (current > previous) return classes.positive;
+        if (current < previous) return classes.negative;
+        return '';
+    };
+
+    // Custom cell renderer for change column
+    const ChangeRenderer = (props) => {
+        const change = props.value;
+        return (
+            <span>
+                {change > 0 ? <ArrowUpwardIcon className={classes.icon}/> :
+                    <ArrowDownwardIcon className={classes.icon}/>}
+            </span>
+        );
+    };
+
     return (
         <Container>
             <Typography variant="h4" gutterBottom className="font-weight-bold">
-                Real-time EUR/USD Price
+                Real-time Price Ticker
             </Typography>
             <TextField
                 label="User Name"
@@ -170,8 +210,8 @@ const PriceTicker = () => {
                 fullWidth
                 margin="normal"
                 error={userId.trim() === ''}
-                InputLabelProps={{ className: 'font-weight-bold' }}
-                InputProps={{ className: 'font-weight-bold' }}
+                InputLabelProps={{className: 'font-weight-bold'}}
+                InputProps={{className: 'font-weight-bold'}}
             />
             {userId.trim() === '' && (
                 <FormHelperText className={`${classes.helperText} font-weight-bold`} error>
@@ -196,24 +236,17 @@ const PriceTicker = () => {
                         className={`${classes.button} font-weight-bold`}
                     >
                         Reconnect
-                        {isReconnecting && <CircularProgress size={20} className={classes.spinner} />}
+                        {isReconnecting && <CircularProgress size={20} className={classes.spinner}/>}
                     </Button>
                 )}
             </div>
-            <Grid container justifyContent="center">
-                <Card className={`${classes.card} ${getCardClass(price.bid, prevPrice.bid)}`}>
-                    <CardContent className={classes.cardContent}>
-                        <Typography variant="h6">Bid</Typography>
-                        <Typography className={classes.price}>{price.bid.toFixed(4)}</Typography>
-                    </CardContent>
-                </Card>
-                <Card className={`${classes.card} ${getCardClass(price.ask, prevPrice.ask)}`}>
-                    <CardContent className={classes.cardContent}>
-                        <Typography variant="h6">Ask</Typography>
-                        <Typography className={classes.price}>{price.ask.toFixed(4)}</Typography>
-                    </CardContent>
-                </Card>
-            </Grid>
+            <div className="ag-theme-alpine" style={{height: 400, width: '100%'}}>
+                <AgGridReact
+                    columnDefs={columns}
+                    rowData={rowData}
+                    frameworkComponents={{changeRenderer: ChangeRenderer}}
+                />
+            </div>
             {error && <Alert severity="error" className="font-weight-bold">{error}</Alert>}
             <Typography variant="body1" className="font-weight-bold">User: {userId}</Typography>
             <Paper className={`${classes.notesPanel} font-weight-bold`}>

@@ -19,21 +19,21 @@ public class SseController {
     private static final Logger logger = LoggerFactory.getLogger(SseController.class);
     private final ScheduledExecutorService scheduler;
     private final CustomHttp2Metrics customHttp2Metrics;
-    private final SseEmitterHelper sseEmitterHelper;
+    private final BaseDispatcher baseDispatcher;
     private final Pricer pricer;
 
     public SseController(CustomHttp2Metrics customHttp2Metrics) {
         this.customHttp2Metrics = customHttp2Metrics;
         this.scheduler = Executors.newScheduledThreadPool(10, new CustomThreadFactory("SseScheduler"));
         this.pricer = new Pricer();
-        this.sseEmitterHelper = new SseEmitterHelper(scheduler, customHttp2Metrics, pricer);
+        this.baseDispatcher = new BaseDispatcher(scheduler, customHttp2Metrics, pricer);
         this.pricer.startPriceGeneration(); // Start price generation here
         scheduleMetricsPrinting();
     }
 
     @GetMapping("/stream-sse")
     public SseEmitter streamSse(@RequestParam String userId) {
-        return sseEmitterHelper.createEmitter(userId);
+        return baseDispatcher.createEmitter(userId);
     }
 
     private void scheduleMetricsPrinting() {
