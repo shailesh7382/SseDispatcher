@@ -1,15 +1,19 @@
-import React, {useEffect, useState, useRef} from 'react';
-import {Container, Typography, Alert, TextField, Button, FormHelperText, CircularProgress, Paper} from '@mui/material';
-import {makeStyles} from '@mui/styles';
+import React, { useEffect, useState, useRef } from 'react';
+import { Container, Typography, Alert, TextField, Button, FormHelperText, CircularProgress, Paper, FormControlLabel, Checkbox } from '@mui/material';
+import { makeStyles } from '@mui/styles';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import {AgGridReact} from 'ag-grid-react';
+import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
+import { Bar } from 'react-chartjs-2';
+import { Chart, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import config from './config';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
-// Define custom styles using Material-UI's makeStyles
+// Register the required components
+Chart.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+
 const useStyles = makeStyles(() => ({
     helperText: {
         fontSize: '0.75rem',
@@ -37,10 +41,10 @@ const useStyles = makeStyles(() => ({
         marginLeft: '8px',
     },
     buttonContainer: {
-        marginTop: '16px', // Push the button panel down
+        marginTop: '16px',
     },
     button: {
-        marginRight: '8px', // Add space between buttons
+        marginRight: '8px',
     },
     icon: {
         verticalAlign: 'middle',
@@ -59,82 +63,94 @@ const PriceTicker = () => {
     const [startTime, setStartTime] = useState(Date.now());
     const [reconnectAttempts, setReconnectAttempts] = useState(0);
     const [isReconnecting, setIsReconnecting] = useState(false);
+    const [dontReconnect, setDontReconnect] = useState(false);
+    const [priceHistory, setPriceHistory] = useState([]);
     const eventSourceRef = useRef(null);
 
-    // Helper function to create a delay
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    // Function to create and manage the EventSource connection
+    const handleOpen = () => {
+        console.log('Connection to SSE opened.');
+        setConnectionClosed(false);
+        setStartTime(Date.now());
+        setTicks(0);
+        setReconnectAttempts(0);
+        setIsReconnecting(false);
+    };
+
+    const handleMessage = (event) => {
+        console.log('Received event:', event.data);
+        try {
+            const data = JSON.parse(event.data);
+            if (data.error) {
+                setError(data.message);
+            } else {
+                const { bid, ask, ccyPair } = data;
+                console.log(`Parsed bid: ${bid}, ask: ${ask}, ccyPair: ${ccyPair}`);
+
+                setPrices((prevPrices) => {
+                    const prevBid = prevPrices[ccyPair]?.bid;
+                    const prevAsk = prevPrices[ccyPair]?.ask;
+
+                    setPrevPrices((prevPrices) => {
+                        const newPrevPrices = { ...prevPrices };
+                        newPrevPrices[ccyPair] = { bid: prevBid, ask: prevAsk };
+                        return newPrevPrices;
+                    });
+
+                    return {
+                        ...prevPrices,
+                        [ccyPair]: { bid, ask }
+                    };
+                });
+
+                setPriceHistory((prevHistory) => {
+                    const newHistory = [...prevHistory, { ccyPair, bid, ask }];
+                    if (newHistory.length > 10) newHistory.shift();
+                    return newHistory;
+                });
+
+                setTicks((prevTicks) => prevTicks + 1);
+            }
+        } catch (e) {
+            console.error('Failed to parse event data:', e);
+        }
+    };
+
+    const handleError = async (err) => {
+        console.error('EventSource failed -> ', err);
+        try {
+            const errorData = JSON.parse(err.data);
+            console.error('error :', errorData);
+            setError(errorData.message || 'EventSource failed.');
+        } catch (e) {
+            setError('EventSource failed: ' + err);
+        }
+        setConnectionClosed(true);
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+
+        if (!dontReconnect && reconnectAttempts < config.maxReconnectAttempts) {
+            setIsReconnecting(true);
+            const delayTime = Math.pow(2, reconnectAttempts) * config.reconnectBaseDelay;
+            await delay(delayTime);
+            setReconnectAttempts(reconnectAttempts + 1);
+            createEventSource();
+        } else {
+            setError('Maximum reconnection attempts reached.');
+            setIsReconnecting(false);
+        }
+    };
+
     const createEventSource = async () => {
         const eventSource = new EventSource(`${config.sseUrl}?userId=${userId}`);
         eventSourceRef.current = eventSource;
 
-        eventSource.onopen = () => {
-            console.log('Connection to SSE opened.');
-            setConnectionClosed(false);
-            setStartTime(Date.now());
-            setTicks(0);
-            setReconnectAttempts(0); // Reset reconnection attempts on successful connection
-            setIsReconnecting(false);
-        };
-
-        eventSource.onmessage = (event) => {
-            console.log('Received event:', event.data);
-            try {
-                const data = JSON.parse(event.data);
-                if (data.error) {
-                    setError(data.message);
-                } else {
-                    const {bid, ask, ccyPair} = data;
-                    console.log(`Parsed bid: ${bid}, ask: ${ask}, ccyPair: ${ccyPair}`);
-
-                    setPrevPrices((prev) => {
-                        const newPrevPrices = {...prev};
-                        newPrevPrices[ccyPair] = prices[ccyPair] || {bid: 0, ask: 0};
-                        return newPrevPrices;
-                    });
-
-                    setPrices((prev) => ({
-                        ...prev,
-                        [ccyPair]: {bid, ask}
-                    }));
-
-                    console.log('Previous prices:', prevPrices);
-                    console.log('current prices:', prices);
-                    setTicks((prevTicks) => prevTicks + 1);
-                }
-            } catch (e) {
-                console.error('Failed to parse event data:', e);
-            }
-        };
-
-        eventSource.onerror = async (err) => {
-            console.error('EventSource failed -> ', err);
-            try {
-                const errorData = JSON.parse(err.data);
-                console.error('error :', errorData);
-                setError(errorData.message || 'EventSource failed.');
-            } catch (e) {
-                setError('EventSource failed: ' + err);
-            }
-            setConnectionClosed(true);
-            eventSource.close();
-            eventSourceRef.current = null;
-
-            if (reconnectAttempts < config.maxReconnectAttempts) {
-                setIsReconnecting(true);
-                const delayTime = Math.pow(2, reconnectAttempts) * config.reconnectBaseDelay; // Exponential backoff
-                await delay(delayTime);
-                setReconnectAttempts(reconnectAttempts + 1);
-                createEventSource();
-            } else {
-                setError('Maximum reconnection attempts reached.');
-                setIsReconnecting(false);
-            }
-        };
+        eventSource.onopen = handleOpen;
+        eventSource.onmessage = handleMessage;
+        eventSource.onerror = handleError;
     };
 
-    // Function to handle subscription to price updates
     const handleSubscribe = () => {
         if (userId.trim() !== '') {
             setSubscribed(true);
@@ -142,11 +158,15 @@ const PriceTicker = () => {
         }
     };
 
-    // Calculate elapsed time and ticks per second
-    const elapsedTime = (Date.now() - startTime) / 1000; // in seconds
+    useEffect(() => {
+        console.log('Previous prices updated:', prevPrices);
+        console.log('Current prices updated:', prices);
+        console.log('Price history updated:', priceHistory);
+    }, [prevPrices, prices, priceHistory]);
+
+    const elapsedTime = (Date.now() - startTime) / 1000;
     const ticksPerSecond = (ticks / elapsedTime).toFixed(2);
 
-    // Cleanup EventSource on component unmount
     useEffect(() => {
         return () => {
             if (eventSourceRef.current) {
@@ -155,9 +175,8 @@ const PriceTicker = () => {
         };
     }, []);
 
-    // Define columns for ag-Grid
     const columns = [
-        {headerName: 'Currency Pair', field: 'ccyPair'},
+        { headerName: 'Currency Pair', field: 'ccyPair' },
         {
             headerName: 'Bid',
             field: 'bid',
@@ -168,10 +187,9 @@ const PriceTicker = () => {
             field: 'ask',
             cellClass: (params) => getCardClass(params.value, prevPrices[params.data.ccyPair]?.ask)
         },
-        {headerName: 'Change', field: 'change', cellRenderer: 'changeRenderer'},
+        { headerName: 'Change', field: 'change', cellRenderer: 'changeRenderer' },
     ];
 
-    // Prepare row data for ag-Grid
     const rowData = Object.keys(prices).map((ccyPair) => ({
         ccyPair,
         bid: prices[ccyPair].bid.toFixed(4),
@@ -179,22 +197,35 @@ const PriceTicker = () => {
         change: prices[ccyPair].bid - (prevPrices[ccyPair]?.bid || 0),
     }));
 
-    // Function to determine the CSS class for price cells
     const getCardClass = (current, previous) => {
         if (current > previous) return classes.positive;
         if (current < previous) return classes.negative;
         return '';
     };
 
-    // Custom cell renderer for change column
     const ChangeRenderer = (props) => {
         const change = props.value;
         return (
             <span>
-                {change > 0 ? <ArrowUpwardIcon className={classes.icon}/> :
-                    <ArrowDownwardIcon className={classes.icon}/>}
+                {change > 0 ? <ArrowUpwardIcon className={classes.icon} /> : <ArrowDownwardIcon className={classes.icon} />}
             </span>
         );
+    };
+
+    const barData = {
+        labels: priceHistory.map((entry, index) => `Tick ${index + 1}`),
+        datasets: [
+            {
+                label: 'Bid Prices',
+                data: priceHistory.map((entry) => entry.bid),
+                backgroundColor: 'rgba(75, 192, 192, 0.6)',
+            },
+            {
+                label: 'Ask Prices',
+                data: priceHistory.map((entry) => entry.ask),
+                backgroundColor: 'rgba(153, 102, 255, 0.6)',
+            },
+        ],
     };
 
     return (
@@ -210,8 +241,8 @@ const PriceTicker = () => {
                 fullWidth
                 margin="normal"
                 error={userId.trim() === ''}
-                InputLabelProps={{className: 'font-weight-bold'}}
-                InputProps={{className: 'font-weight-bold'}}
+                InputLabelProps={{ className: 'font-weight-bold' }}
+                InputProps={{ className: 'font-weight-bold' }}
             />
             {userId.trim() === '' && (
                 <FormHelperText className={`${classes.helperText} font-weight-bold`} error>
@@ -236,15 +267,25 @@ const PriceTicker = () => {
                         className={`${classes.button} font-weight-bold`}
                     >
                         Reconnect
-                        {isReconnecting && <CircularProgress size={20} className={classes.spinner}/>}
+                        {isReconnecting && <CircularProgress size={20} className={classes.spinner} />}
                     </Button>
                 )}
             </div>
-            <div className="ag-theme-alpine" style={{height: 400, width: '100%'}}>
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        checked={dontReconnect}
+                        onChange={(e) => setDontReconnect(e.target.checked)}
+                        color="primary"
+                    />
+                }
+                label="Don't Reconnect"
+            />
+            <div className="ag-theme-alpine" style={{ height: 400, width: '100%' }}>
                 <AgGridReact
                     columnDefs={columns}
                     rowData={rowData}
-                    frameworkComponents={{changeRenderer: ChangeRenderer}}
+                    frameworkComponents={{ changeRenderer: ChangeRenderer }}
                 />
             </div>
             {error && <Alert severity="error" className="font-weight-bold">{error}</Alert>}
@@ -259,6 +300,7 @@ const PriceTicker = () => {
                     Attempting to reconnect... ({reconnectAttempts + 1}/3)
                 </div>
             )}
+            <Bar data={barData} />
         </Container>
     );
 };
