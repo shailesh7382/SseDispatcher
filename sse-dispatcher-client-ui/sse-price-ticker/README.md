@@ -1,88 +1,82 @@
-# Getting Started with Create React App
+# Real-time Price Ticker
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This project is a real-time price ticker application built with React for the frontend and Spring Boot for the backend. It displays live pricing data for various currency pairs and allows users to start and pause pricing for individual or all currency pairs.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+- **Real-time Price Updates**: Displays live bid and ask prices for currency pairs.
+- **Start/Pause Pricing**: Start or pause pricing for individual currency pairs or all pairs at once.
+- **User Subscription**: Users can subscribe to receive real-time updates.
+- **Reconnect**: Option to reconnect if the connection is lost.
+- **Historical Data**: Displays historical price data in bar charts.
 
-### `npm start`
+## Technologies Used
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- **Frontend**: React, Material-UI, Axios, Chart.js, AG Grid
+- **Backend**: Spring Boot, SSE (Server-Sent Events)
+- **Build Tools**: Maven (for backend), npm (for frontend)
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Getting Started
 
-### `npm test`
+### Prerequisites
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- Node.js and npm
+- Java 11+
+- Maven
 
-### `npm run build`
+### Installation
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+1. **Clone the repository**:
+    ```sh
+    git clone https://github.com/your-repo/real-time-price-ticker.git
+    cd real-time-price-ticker
+    ```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+2. **Backend Setup**:
+    ```sh
+    cd ss-dispatcher-server
+    mvn clean install
+    mvn spring-boot:run
+    ```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+3. **Frontend Setup**:
+    ```sh
+    cd ../sse-dispatcher-client-ui
+    npm install
+    npm start
+    ```
 
-### `npm run eject`
+### Running the Application
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+1. **Start the backend server**:
+    ```sh
+    cd ss-dispatcher-server
+    mvn spring-boot:run
+    ```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+2. **Start the frontend application**:
+    ```sh
+    cd ../sse-dispatcher-client-ui
+    npm start
+    ```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+3. **Open your browser** and navigate to `http://localhost:3000`.
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## API Endpoints
 
-# Price Ticker
+### Backend Endpoints
 
-The `PriceTicker` module is a React component that displays real-time EUR/USD price updates using Server-Sent Events (SSE). It includes features for subscribing to price updates, handling reconnection with exponential backoff, and providing UI feedback during reconnection attempts. Below is a detailed description of the module:
+- **Start Pricing for a Currency Pair**: `/startPricing?ccyPair={ccyPair}`
+- **Pause Pricing for a Currency Pair**: `/pausePricing?ccyPair={ccyPair}`
+- **Start Pricing for All Pairs**: `/startAllPricing`
+- **Pause Pricing for All Pairs**: `/pauseAllPricing`
+- **Get Pricing State**: `/pricingState`
 
-### Imports
-- **React**: Core library for building the component.
-- **Material-UI Components**: Various UI components like `Container`, `Typography`, `Alert`, `TextField`, `Button`, `FormHelperText`, `Card`, `CardContent`, `Grid`, `Paper`, and `CircularProgress`.
-- **makeStyles**: A utility from Material-UI for creating custom styles.
-- **Bootstrap**: For additional styling.
+## Components
 
-### Styles
-- **useStyles**: A hook that defines custom styles for various elements in the component, such as helper text, positive/negative price changes, cards, notes panel, reconnect row, and spinner.
+### `PriceTicker.js`
 
-### State Variables
-- **price**: Holds the current bid and ask prices.
-- **prevPrice**: Holds the previous bid and ask prices for comparison.
-- **error**: Stores any error messages.
-- **userId**: Stores the user ID entered by the user.
-- **subscribed**: Indicates whether the user is subscribed to price updates.
-- **connectionClosed**: Indicates whether the SSE connection is closed.
-- **ticks**: Counts the number of price updates received.
-- **startTime**: Records the start time of the connection.
-- **reconnectAttempts**: Counts the number of reconnection attempts.
-- **isReconnecting**: Indicates whether the component is currently attempting to reconnect.
-
-### Helper Functions
-- **delay**: Returns a promise that resolves after a specified time, used for implementing exponential backoff.
-- **getCardClass**: Determines the CSS class for price cards based on whether the price has increased or decreased.
-
-### Main Functions
-- **createEventSource**: Establishes the SSE connection, handles incoming messages, and manages reconnection attempts with exponential backoff.
-- **handleSubscribe**: Initiates the subscription to price updates by calling `createEventSource`.
-
-### useEffect Hook
-- Ensures that the SSE connection is closed when the component unmounts to prevent memory leaks.
-
-### JSX Structure
-- **Container**: Wraps the entire component.
-- **Typography**: Displays the title.
-- **TextField**: Allows the user to enter their user ID.
-- **Button**: Subscribes the user to price updates.
-- **Grid**: Displays the bid and ask prices in cards.
-- **Alert**: Shows error messages.
-- **Paper**: Displays additional information like update speed.
-- **Reconnect Button**: Allows the user to manually reconnect if the connection is closed.
-
-#
+- **User Subscription**: Allows users to enter a username and subscribe to real-time updates.
+- **Start/Pause Buttons**: Buttons to start or pause pricing for individual or all currency pairs.
+- **Price Grid**: Displays the current bid and ask prices for each currency pair.
+- **Historical Data Charts**: Displays historical price data in bar charts.

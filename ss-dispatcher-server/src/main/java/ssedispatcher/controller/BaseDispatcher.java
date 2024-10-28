@@ -22,7 +22,7 @@ public class BaseDispatcher {
         this.scheduler = scheduler;
         this.customHttp2Metrics = customHttp2Metrics;
         this.pricer = pricer;
-        this.pricer.setSseEmitterHelper(this); // Set the SseEmitterHelper in Pricer
+        this.pricer.setBaseDispatcher(this); // Set the SseEmitterHelper in Pricer
     }
 
     public SseEmitter createEmitter(String userId) {

@@ -1,15 +1,18 @@
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { Container, Typography, Alert, TextField, Button, FormHelperText, CircularProgress, Paper, FormControlLabel, Checkbox } from '@mui/material';
+import React, { useEffect, useState, useRef } from 'react';
+import { Container, Typography, TextField, Button, FormHelperText, CircularProgress, Paper, FormControlLabel, Checkbox, Alert, IconButton } from '@mui/material';
 import { makeStyles } from '@mui/styles';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
-import { Bar } from 'react-chartjs-2';
-import { Chart, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
+import axios from 'axios';
 import config from './config';
 import ChangeRenderer from './ChangeRenderer';
-import PropTypes from 'prop-types';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import PauseIcon from '@mui/icons-material/Pause';
+import { Bar } from 'react-chartjs-2';
+import { Chart, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
+
 
 Chart.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -18,35 +21,34 @@ const useStyles = makeStyles(() => ({
         fontSize: '0.75rem',
         marginLeft: '8px',
     },
-    positive: {
-        color: 'green',
-    },
-    negative: {
-        color: 'red',
-    },
-    notesPanel: {
-        marginTop: '16px',
-        padding: '16px',
-        backgroundColor: '#f5f5f5',
-        color: '#666',
-    },
-    reconnectRow: {
-        backgroundColor: 'lightyellow',
-        padding: '8px',
-        marginTop: '16px',
-        textAlign: 'center',
-    },
-    spinner: {
-        marginLeft: '8px',
-    },
     buttonContainer: {
         marginTop: '16px',
     },
     button: {
         marginRight: '8px',
+        marginBottom: '8px',
     },
-    icon: {
-        verticalAlign: 'middle',
+    spinner: {
+        marginLeft: '8px',
+    },
+    greenButton: {
+        backgroundColor: 'green',
+        color: 'white',
+        '&:hover': {
+            backgroundColor: 'darkgreen',
+        },
+    },
+    redButton: {
+        backgroundColor: 'red',
+        color: 'white',
+        '&:hover': {
+            backgroundColor: 'darkred',
+        },
+    },
+    gridContainer: {
+        display: 'flex',
+        justifyContent: 'center',
+        marginTop: '20px',
     },
 }));
 
@@ -64,6 +66,8 @@ const PriceTicker = () => {
     const [isReconnecting, setIsReconnecting] = useState(false);
     const [dontReconnect, setDontReconnect] = useState(false);
     const [priceHistory, setPriceHistory] = useState({});
+    const [ccyPairs, setCcyPairs] = useState([]);
+    const [pricingState, setPricingState] = useState({});
     const eventSourceRef = useRef(null);
 
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -158,6 +162,38 @@ const PriceTicker = () => {
         }
     };
 
+    const startAllPricing = () => {
+        axios.get('http://localhost:8080/startAllPricing')
+            .then(response => {
+                console.log(response.data);
+                fetchPricingState();
+            })
+            .catch(error => {
+                console.error('Error starting all pricing:', error);
+            });
+    };
+
+    const pauseAllPricing = () => {
+        axios.get('http://localhost:8080/pauseAllPricing')
+            .then(response => {
+                console.log(response.data);
+                fetchPricingState();
+            })
+            .catch(error => {
+                console.error('Error pausing all pricing:', error);
+            });
+    };
+
+    const fetchPricingState = () => {
+        axios.get('http://localhost:8080/pricingState')
+            .then(response => {
+                setPricingState(response.data);
+            })
+            .catch(error => {
+                console.error('Error fetching pricing state:', error);
+            });
+    };
+
     useEffect(() => {
         console.log('Previous prices updated:', prevPrices);
         console.log('Current prices updated:', prices);
@@ -175,13 +211,51 @@ const PriceTicker = () => {
         };
     }, []);
 
-    const highlightChangedDigits = (current, previous) => {
+    useEffect(() => {
+        // Fetch the list of currency pairs
+        axios.get('http://localhost:8080/ccyPairs')
+            .then(response => {
+                setCcyPairs(response.data);
+            })
+            .catch(error => {
+                console.error('Error fetching currency pairs:', error);
+            });
+
+        // Fetch the pricing state
+        fetchPricingState();
+    }, []);
+
+    const startPricing = (ccyPair) => {
+        // Call the startPricing API
+        axios.get('http://localhost:8080/startPricing', { params: { ccyPair } })
+            .then(response => {
+                console.log(response.data);
+                fetchPricingState();
+            })
+            .catch(error => {
+                console.error('Error starting pricing:', error);
+            });
+    };
+
+    const pausePricing = (ccyPair) => {
+        // Call the pausePricing API
+        axios.get('http://localhost:8080/pausePricing', { params: { ccyPair } })
+            .then(response => {
+                console.log(response.data);
+                fetchPricingState();
+            })
+            .catch(error => {
+                console.error('Error pausing pricing:', error);
+            });
+    };
+
+    const highlightChangedDigits = (current, previous, reverse = false) => {
         if (!previous) return current;
 
         const currentStr = current.toFixed(4);
         const previousStr = previous.toFixed(4);
 
-        return currentStr.split('').map((char, index) => {
+        const digits = currentStr.split('').map((char, index) => {
             let style = {};
             if (index === currentStr.length - 1) {
                 style = { fontSize: '0.75em' }; // Decrease font size for the last digit
@@ -195,30 +269,47 @@ const PriceTicker = () => {
 
             return <span key={index} style={style}>{char}</span>;
         });
+
+        return reverse ? digits.reverse() : digits;
     };
 
     const columns = [
-        { headerName: 'Currency Pair', field: 'ccyPair' },
+        { headerName: 'Currency Pair', field: 'ccyPair', width: 150 },
         {
             headerName: 'Bid',
             field: 'bid',
-            cellRenderer: (params) => highlightChangedDigits(params.value, prevPrices[params.data.ccyPair]?.bid)
+            cellRenderer: (params) => highlightChangedDigits(params.value, prevPrices[params.data.ccyPair]?.bid),
+            cellStyle: { textAlign: 'right' },
+            width: 100 // Reduce the width of the Bid column
         },
         {
             headerName: 'Ask',
             field: 'ask',
-            cellRenderer: (params) => highlightChangedDigits(params.value, prevPrices[params.data.ccyPair]?.ask)
+            cellRenderer: (params) => highlightChangedDigits(params.value, prevPrices[params.data.ccyPair]?.ask, true),
+            cellStyle: { textAlign: 'left' },
+            width: 100 // Reduce the width of the Ask column
         },
-        { headerName: 'Change Bid', field: 'changeBid', cellRenderer: 'changeRenderer' },
-        { headerName: 'Change Ask', field: 'changeAsk', cellRenderer: 'changeRenderer' },
+        {
+            headerName: 'Action',
+            field: 'action',
+            cellRenderer: (params) => (
+                <div>
+                    <IconButton className={classes.greenButton} onClick={() => startPricing(params.data.ccyPair)} disabled={pricingState[params.data.ccyPair]}>
+                        <PlayArrowIcon />
+                    </IconButton>
+                    <IconButton className={classes.redButton} onClick={() => pausePricing(params.data.ccyPair)} disabled={!pricingState[params.data.ccyPair]}>
+                        <PauseIcon />
+                    </IconButton>
+                </div>
+            ),
+            width: 150
+        }
     ];
 
-    const rowData = Object.keys(prices).map((ccyPair) => ({
+    const rowData = ccyPairs.map((ccyPair) => ({
         ccyPair,
-        bid: prices[ccyPair].bid,
-        ask: prices[ccyPair].ask,
-        changeBid: prices[ccyPair].bid - (prevPrices[ccyPair]?.bid || 0),
-        changeAsk: prices[ccyPair].ask - (prevPrices[ccyPair]?.ask || 0),
+        bid: prices[ccyPair]?.bid || 0,
+        ask: prices[ccyPair]?.ask || 0,
     }));
 
     const renderBarCharts = () => {
@@ -275,8 +366,8 @@ const PriceTicker = () => {
                 fullWidth
                 margin="normal"
                 error={userId.trim() === ''}
-                InputLabelProps={{ className: 'font-weight-bold' }}
-                InputProps={{ className: 'font-weight-bold' }}
+                InputLabelProps={{className: 'font-weight-bold'}}
+                InputProps={{className: 'font-weight-bold'}}
             />
             {userId.trim() === '' && (
                 <FormHelperText className={`${classes.helperText} font-weight-bold`} error>
@@ -293,6 +384,22 @@ const PriceTicker = () => {
                 >
                     Subscribe
                 </Button>
+                <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={startAllPricing}
+                    className={`${classes.button} font-weight-bold`}
+                >
+                    Start All
+                </Button>
+                <Button
+                    variant="contained"
+                    color="secondary"
+                    onClick={pauseAllPricing}
+                    className={`${classes.button} font-weight-bold`}
+                >
+                    Pause All
+                </Button>
                 {connectionClosed && (
                     <Button
                         variant="contained"
@@ -301,7 +408,7 @@ const PriceTicker = () => {
                         className={`${classes.button} font-weight-bold`}
                     >
                         Reconnect
-                        {isReconnecting && <CircularProgress size={20} className={classes.spinner} />}
+                        {isReconnecting && <CircularProgress size={20} className={classes.spinner}/>}
                     </Button>
                 )}
             </div>
@@ -315,12 +422,14 @@ const PriceTicker = () => {
                 }
                 label="Don't Reconnect"
             />
-            <div className="ag-theme-alpine" style={{ height: 400, width: '100%' }}>
-                <AgGridReact
-                    columnDefs={columns}
-                    rowData={rowData}
-                    frameworkComponents={{ changeRenderer: ChangeRenderer }}
-                />
+            <div className={classes.gridContainer}>
+                <div className="ag-theme-alpine" style={{height: 400, width: '80%'}}>
+                    <AgGridReact
+                        columnDefs={columns}
+                        rowData={rowData}
+                        frameworkComponents={{changeRenderer: ChangeRenderer}}
+                    />
+                </div>
             </div>
             {error && <Alert severity="error" className="font-weight-bold">{error}</Alert>}
             <Typography variant="body1" className="font-weight-bold">User: {userId}</Typography>
@@ -329,12 +438,7 @@ const PriceTicker = () => {
                     Update Speed: {ticksPerSecond} ticks per second
                 </Typography>
             </Paper>
-            {connectionClosed && reconnectAttempts < 3 && (
-                <div className={classes.reconnectRow}>
-                    Attempting to reconnect... ({reconnectAttempts + 1}/3)
-                </div>
-            )}
-            <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+            <div style={{display: 'flex', flexWrap: 'wrap'}}>
                 {renderBarCharts()}
             </div>
         </Container>
