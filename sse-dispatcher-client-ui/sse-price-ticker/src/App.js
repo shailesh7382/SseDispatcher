@@ -2,7 +2,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 import React from 'react';
 import { ThemeProvider } from '@mui/material/styles';
-import PriceTicker from './PriceTicker';
+import PriceTicker from './ticker/PriceTicker';
 import theme from './theme';
 import './App.css';
 

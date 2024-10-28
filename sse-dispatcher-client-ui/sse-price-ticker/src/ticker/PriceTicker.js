@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { Container, Typography, Alert, TextField, Button, FormHelperText, CircularProgress, Paper, FormControlLabel, Checkbox } from '@mui/material';
 import { makeStyles } from '@mui/styles';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -8,10 +8,9 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { Bar } from 'react-chartjs-2';
 import { Chart, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import config from './config';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import ChangeRenderer from './ChangeRenderer';
+import PropTypes from 'prop-types';
 
-// Register the required components
 Chart.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 const useStyles = makeStyles(() => ({
@@ -20,10 +19,10 @@ const useStyles = makeStyles(() => ({
         marginLeft: '8px',
     },
     positive: {
-        backgroundColor: 'lightgreen',
+        color: 'green',
     },
     negative: {
-        backgroundColor: 'lightcoral',
+        color: 'red',
     },
     notesPanel: {
         marginTop: '16px',
@@ -64,13 +63,12 @@ const PriceTicker = () => {
     const [reconnectAttempts, setReconnectAttempts] = useState(0);
     const [isReconnecting, setIsReconnecting] = useState(false);
     const [dontReconnect, setDontReconnect] = useState(false);
-    const [priceHistory, setPriceHistory] = useState([]);
+    const [priceHistory, setPriceHistory] = useState({});
     const eventSourceRef = useRef(null);
 
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     const handleOpen = () => {
-        console.log('Connection to SSE opened.');
         setConnectionClosed(false);
         setStartTime(Date.now());
         setTicks(0);
@@ -79,14 +77,12 @@ const PriceTicker = () => {
     };
 
     const handleMessage = (event) => {
-        console.log('Received event:', event.data);
         try {
             const data = JSON.parse(event.data);
             if (data.error) {
                 setError(data.message);
             } else {
                 const { bid, ask, ccyPair } = data;
-                console.log(`Parsed bid: ${bid}, ask: ${ask}, ccyPair: ${ccyPair}`);
 
                 setPrices((prevPrices) => {
                     const prevBid = prevPrices[ccyPair]?.bid;
@@ -105,8 +101,14 @@ const PriceTicker = () => {
                 });
 
                 setPriceHistory((prevHistory) => {
-                    const newHistory = [...prevHistory, { ccyPair, bid, ask }];
-                    if (newHistory.length > 10) newHistory.shift();
+                    const newHistory = { ...prevHistory };
+                    if (!newHistory[ccyPair]) {
+                        newHistory[ccyPair] = [];
+                    }
+                    newHistory[ccyPair].push({ bid, ask });
+                    if (newHistory[ccyPair].length > 10) {
+                        newHistory[ccyPair].shift();
+                    }
                     return newHistory;
                 });
 
@@ -118,10 +120,8 @@ const PriceTicker = () => {
     };
 
     const handleError = async (err) => {
-        console.error('EventSource failed -> ', err);
         try {
             const errorData = JSON.parse(err.data);
-            console.error('error :', errorData);
             setError(errorData.message || 'EventSource failed.');
         } catch (e) {
             setError('EventSource failed: ' + err);
@@ -175,58 +175,92 @@ const PriceTicker = () => {
         };
     }, []);
 
+    const highlightChangedDigits = (current, previous) => {
+        if (!previous) return current;
+
+        const currentStr = current.toFixed(4);
+        const previousStr = previous.toFixed(4);
+
+        return currentStr.split('').map((char, index) => {
+            let style = {};
+            if (index === currentStr.length - 1) {
+                style = { fontSize: '0.75em' }; // Decrease font size for the last digit
+            } else if (index === currentStr.length - 3 || index === currentStr.length - 2) {
+                style = { fontSize: '1.25em' }; // Increase font size for the 2nd and 3rd decimal places
+            }
+
+            if (char !== previousStr[index]) {
+                style.color = char > previousStr[index] ? 'green' : 'red';
+            }
+
+            return <span key={index} style={style}>{char}</span>;
+        });
+    };
+
     const columns = [
         { headerName: 'Currency Pair', field: 'ccyPair' },
         {
             headerName: 'Bid',
             field: 'bid',
-            cellClass: (params) => getCardClass(params.value, prevPrices[params.data.ccyPair]?.bid)
+            cellRenderer: (params) => highlightChangedDigits(params.value, prevPrices[params.data.ccyPair]?.bid)
         },
         {
             headerName: 'Ask',
             field: 'ask',
-            cellClass: (params) => getCardClass(params.value, prevPrices[params.data.ccyPair]?.ask)
+            cellRenderer: (params) => highlightChangedDigits(params.value, prevPrices[params.data.ccyPair]?.ask)
         },
-        { headerName: 'Change', field: 'change', cellRenderer: 'changeRenderer' },
+        { headerName: 'Change Bid', field: 'changeBid', cellRenderer: 'changeRenderer' },
+        { headerName: 'Change Ask', field: 'changeAsk', cellRenderer: 'changeRenderer' },
     ];
 
     const rowData = Object.keys(prices).map((ccyPair) => ({
         ccyPair,
-        bid: prices[ccyPair].bid.toFixed(4),
-        ask: prices[ccyPair].ask.toFixed(4),
-        change: prices[ccyPair].bid - (prevPrices[ccyPair]?.bid || 0),
+        bid: prices[ccyPair].bid,
+        ask: prices[ccyPair].ask,
+        changeBid: prices[ccyPair].bid - (prevPrices[ccyPair]?.bid || 0),
+        changeAsk: prices[ccyPair].ask - (prevPrices[ccyPair]?.ask || 0),
     }));
 
-    const getCardClass = (current, previous) => {
-        if (current > previous) return classes.positive;
-        if (current < previous) return classes.negative;
-        return '';
-    };
+    const renderBarCharts = () => {
+    return Object.keys(prices).map((ccyPair) => {
+        const ccyPairHistory = priceHistory[ccyPair] || [];
+        const barData = {
+            labels: ccyPairHistory.map((entry, index) => `Tick ${index + 1}`),
+            datasets: [
+                {
+                    label: 'Bid Prices',
+                    data: ccyPairHistory.map((entry) => entry.bid),
+                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                    barThickness: 10, // Adjust the bar thickness
+                },
+                {
+                    label: 'Ask Prices',
+                    data: ccyPairHistory.map((entry) => entry.ask),
+                    backgroundColor: 'rgba(153, 102, 255, 0.6)',
+                    barThickness: 10, // Adjust the bar thickness
+                },
+            ]
+        };
 
-    const ChangeRenderer = (props) => {
-        const change = props.value;
+        const options = {
+            scales: {
+                x: {
+                    display: false // Hide the x-axis legend ticks
+                },
+                y: {
+                    beginAtZero: false
+                }
+            }
+        };
+
         return (
-            <span>
-                {change > 0 ? <ArrowUpwardIcon className={classes.icon} /> : <ArrowDownwardIcon className={classes.icon} />}
-            </span>
+            <div key={ccyPair} style={{ width: '300px', height: '200px', margin: '20px' }}>
+                <Typography variant="h6">{ccyPair}</Typography>
+                <Bar data={barData} options={options} />
+            </div>
         );
-    };
-
-    const barData = {
-        labels: priceHistory.map((entry, index) => `Tick ${index + 1}`),
-        datasets: [
-            {
-                label: 'Bid Prices',
-                data: priceHistory.map((entry) => entry.bid),
-                backgroundColor: 'rgba(75, 192, 192, 0.6)',
-            },
-            {
-                label: 'Ask Prices',
-                data: priceHistory.map((entry) => entry.ask),
-                backgroundColor: 'rgba(153, 102, 255, 0.6)',
-            },
-        ],
-    };
+    });
+};
 
     return (
         <Container>
@@ -300,7 +334,9 @@ const PriceTicker = () => {
                     Attempting to reconnect... ({reconnectAttempts + 1}/3)
                 </div>
             )}
-            <Bar data={barData} />
+            <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+                {renderBarCharts()}
+            </div>
         </Container>
     );
 };
