@@ -5,7 +5,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import ssedispatcher.metrics.CustomHttp2Metrics;
 
-import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -22,7 +21,7 @@ public class BaseDispatcher {
         this.scheduler = scheduler;
         this.customHttp2Metrics = customHttp2Metrics;
         this.pricer = pricer;
-        this.pricer.setBaseDispatcher(this); // Set the SseEmitterHelper in Pricer
+        this.pricer.setBaseDispatcher(this); // Set the BaseDispatcher in Pricer
     }
 
     public SseEmitter createEmitter(String userId) {
@@ -60,12 +59,8 @@ public class BaseDispatcher {
     public void sendPriceUpdate(Price price) {
         userEmitters.forEach((userId, emitter) -> {
             try {
-                customHttp2Metrics.incrementStreams();
                 emitter.send(price);
-//                logger.info("{} -> {}", userId, price);
-            } catch (IOException e) {
-                customHttp2Metrics.decrementStreams();
-                emitter.completeWithError(e);
+            } catch (Exception e) {
                 logger.error("Error sending price update to user: {}", userId, e);
             }
         });

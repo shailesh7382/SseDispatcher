@@ -92,11 +92,10 @@ const PriceTicker = () => {
                     const prevBid = prevPrices[ccyPair]?.bid;
                     const prevAsk = prevPrices[ccyPair]?.ask;
 
-                    setPrevPrices((prevPrices) => {
-                        const newPrevPrices = { ...prevPrices };
-                        newPrevPrices[ccyPair] = { bid: prevBid, ask: prevAsk };
-                        return newPrevPrices;
-                    });
+                    setPrevPrices((prevPrices) => ({
+                        ...prevPrices,
+                        [ccyPair]: { bid: prevBid, ask: prevAsk }
+                    }));
 
                     return {
                         ...prevPrices,
@@ -365,6 +364,34 @@ const PriceTicker = () => {
         });
     };
 
+    const handleSubscribe50Users = async () => {
+        for (let i = 1; i <= 50; i++) {
+            const userId = `user${i}`;
+            try {
+                const response = await axios.post(`${config.urls.login}`, { userId: userId.trim() }, {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const token = response.data.token;
+                await axios.get(config.urls.startAllPricing, { headers: { Authorization: `Bearer ${token}` } });
+
+                // Create an SSE connection for each user
+                const eventSource = new EventSource(`${config.urls.sse}?userId=${userId}`);
+                eventSource.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    console.log(`User ${userId} received data:`, data);
+                };
+                eventSource.onerror = (err) => {
+                    console.error(`User ${userId} encountered an error:`, err);
+                    eventSource.close();
+                };
+            } catch (error) {
+                console.error(`Failed to subscribe and start pricing for ${userId}:`, error);
+            }
+        }
+    };
+
     return (
         <Container>
             <Typography variant="h4" gutterBottom className="font-weight-bold">
@@ -412,6 +439,14 @@ const PriceTicker = () => {
                 >
                     Pause All
                 </Button>
+                <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleSubscribe50Users}
+                    className={`${classes.button} font-weight-bold`}
+                >
+                    Subscribe 50 Users and Start All Pricing
+                </Button>
                 {connectionClosed && (
                     <Button
                         variant="contained"
@@ -440,6 +475,9 @@ const PriceTicker = () => {
                         columnDefs={columns}
                         rowData={rowData}
                         frameworkComponents={{ changeRenderer: ChangeRenderer }}
+                        suppressScrollOnNewData={true}
+                        deltaRowDataMode={true}
+                        getRowNodeId={(data) => data.ccyPair}
                     />
                 </div>
             </div>
