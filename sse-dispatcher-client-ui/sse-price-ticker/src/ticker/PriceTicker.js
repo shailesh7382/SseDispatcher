@@ -13,7 +13,6 @@ import PauseIcon from '@mui/icons-material/Pause';
 import { Bar } from 'react-chartjs-2';
 import { Chart, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 
-
 Chart.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 const useStyles = makeStyles(() => ({
@@ -147,7 +146,7 @@ const PriceTicker = () => {
     };
 
     const createEventSource = async () => {
-        const eventSource = new EventSource(`${config.sseUrl}?userId=${userId}`);
+        const eventSource = new EventSource(`${config.urls.sse}?userId=${userId}`);
         eventSourceRef.current = eventSource;
 
         eventSource.onopen = handleOpen;
@@ -163,7 +162,7 @@ const PriceTicker = () => {
     };
 
     const startAllPricing = () => {
-        axios.get('http://localhost:8080/startAllPricing')
+        axios.get(config.urls.startAllPricing)
             .then(response => {
                 console.log(response.data);
                 fetchPricingState();
@@ -174,7 +173,7 @@ const PriceTicker = () => {
     };
 
     const pauseAllPricing = () => {
-        axios.get('http://localhost:8080/pauseAllPricing')
+        axios.get(config.urls.pauseAllPricing)
             .then(response => {
                 console.log(response.data);
                 fetchPricingState();
@@ -185,7 +184,7 @@ const PriceTicker = () => {
     };
 
     const fetchPricingState = () => {
-        axios.get('http://localhost:8080/pricingState')
+        axios.get(config.urls.pricingState)
             .then(response => {
                 setPricingState(response.data);
             })
@@ -213,7 +212,7 @@ const PriceTicker = () => {
 
     useEffect(() => {
         // Fetch the list of currency pairs
-        axios.get('http://localhost:8080/ccyPairs')
+        axios.get(config.urls.ccyPairs)
             .then(response => {
                 setCcyPairs(response.data);
             })
@@ -227,7 +226,7 @@ const PriceTicker = () => {
 
     const startPricing = (ccyPair) => {
         // Call the startPricing API
-        axios.get('http://localhost:8080/startPricing', { params: { ccyPair } })
+        axios.get(config.urls.startPricing, { params: { ccyPair } })
             .then(response => {
                 console.log(response.data);
                 fetchPricingState();
@@ -239,7 +238,7 @@ const PriceTicker = () => {
 
     const pausePricing = (ccyPair) => {
         // Call the pausePricing API
-        axios.get('http://localhost:8080/pausePricing', { params: { ccyPair } })
+        axios.get(config.urls.pausePricing, { params: { ccyPair } })
             .then(response => {
                 console.log(response.data);
                 fetchPricingState();
