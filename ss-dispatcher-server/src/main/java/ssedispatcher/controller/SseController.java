@@ -3,9 +3,9 @@ package ssedispatcher.controller;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import ssedispatcher.metrics.CustomHttp2Metrics;
 
@@ -42,12 +42,16 @@ public class SseController {
         return baseDispatcher.createEmitter(userId);
     }
 
-    @GetMapping("/login")
-    public String loginUser(@RequestParam String userId) {
+    @PostMapping("/login")
+    public Map<String, String> loginUser(@RequestBody Map<String, String> payload) {
+        String userId = payload.get("userId");
+        if (userId == null || userId.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User ID is required");
+        }
         // Generate a unique token for the user
         String token = UUID.randomUUID().toString();
         logger.info("User {} logged in with token {}", userId, token);
-        return token;
+        return Map.of("token", token);
     }
 
     @GetMapping("/ccyPairs")
@@ -102,9 +106,7 @@ public class SseController {
     }
 
     private void scheduleMetricsPrinting() {
-        scheduler.scheduleAtFixedRate(() -> {
-            customHttp2Metrics.printMetrics();
-        }, 0, 1, TimeUnit.MINUTES); // Adjust the period as needed
+        scheduler.scheduleAtFixedRate(customHttp2Metrics::printMetrics, 0, 1, TimeUnit.MINUTES); // Adjust the period as needed
     }
 
     private static class CustomThreadFactory implements ThreadFactory {

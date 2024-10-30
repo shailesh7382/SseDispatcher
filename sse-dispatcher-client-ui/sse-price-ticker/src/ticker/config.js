@@ -1,5 +1,3 @@
-// config.js
-
 const host = 'http://localhost';
 const port = '8080';
 
@@ -11,7 +9,8 @@ const config = {
         startPricing: `${host}:${port}/startPricing`,
         pausePricing: `${host}:${port}/pausePricing`,
         ccyPairs: `${host}:${port}/ccyPairs`,
-        pricingState: `${host}:${port}/pricingState`
+        pricingState: `${host}:${port}/pricingState`,
+        login: `${host}:${port}/login`
     },
     maxReconnectAttempts: 5,
     reconnectBaseDelay: 1000 // in milliseconds

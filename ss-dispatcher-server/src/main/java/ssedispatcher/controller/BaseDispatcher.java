@@ -12,7 +12,7 @@ import java.util.concurrent.ScheduledExecutorService;
 public class BaseDispatcher {
 
     private static final Logger logger = LoggerFactory.getLogger(BaseDispatcher.class);
-    private static final long SSE_TIMEOUT = 30_000L; // 30 seconds
+    private static final long SSE_TIMEOUT = 300_000L; // 300 seconds
     private final ConcurrentHashMap<String, SseEmitter> userEmitters = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler;
     private final CustomHttp2Metrics customHttp2Metrics;
@@ -62,7 +62,7 @@ public class BaseDispatcher {
             try {
                 customHttp2Metrics.incrementStreams();
                 emitter.send(price);
-                logger.info("{} -> {}", userId, price);
+//                logger.info("{} -> {}", userId, price);
             } catch (IOException e) {
                 customHttp2Metrics.decrementStreams();
                 emitter.completeWithError(e);

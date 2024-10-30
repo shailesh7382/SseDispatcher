@@ -1,4 +1,3 @@
-// src/main/java/ssedispatcher/config/WebConfig.java
 package ssedispatcher.config;
 
 import org.springframework.context.annotation.Bean;
