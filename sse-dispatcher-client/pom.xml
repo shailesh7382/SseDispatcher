@@ -10,7 +10,7 @@
         <groupId>ssedispatcher</groupId>
         <artifactId>sse-dispatch</artifactId>
         <version>1.0-SNAPSHOT</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <relativePath>../pom.xml</relativePath>
     </parent>
     <properties>
         <java.version>11</java.version>
