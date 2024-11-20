@@ -67,6 +67,7 @@ const PriceTicker = () => {
     const [priceHistory, setPriceHistory] = useState({});
     const [ccyPairs, setCcyPairs] = useState([]);
     const [pricingState, setPricingState] = useState({});
+    const [token, setToken] = useState('token');
     const eventSourceRef = useRef(null);
 
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -91,11 +92,10 @@ const PriceTicker = () => {
                     const prevBid = prevPrices[ccyPair]?.bid;
                     const prevAsk = prevPrices[ccyPair]?.ask;
 
-                    setPrevPrices((prevPrices) => {
-                        const newPrevPrices = { ...prevPrices };
-                        newPrevPrices[ccyPair] = { bid: prevBid, ask: prevAsk };
-                        return newPrevPrices;
-                    });
+                    setPrevPrices((prevPrices) => ({
+                        ...prevPrices,
+                        [ccyPair]: { bid: prevBid, ask: prevAsk }
+                    }));
 
                     return {
                         ...prevPrices,
@@ -154,15 +154,25 @@ const PriceTicker = () => {
         eventSource.onerror = handleError;
     };
 
-    const handleSubscribe = () => {
+    const handleSubscribe = async () => {
         if (userId.trim() !== '') {
-            setSubscribed(true);
-            createEventSource();
+            try {
+                const response = await axios.post(`${config.urls.login}`, { userId: userId.trim() }, {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                setToken(response.data.token);
+                setSubscribed(true);
+                createEventSource();
+            } catch (error) {
+                setError('Failed to login and get token.');
+            }
         }
     };
 
     const startAllPricing = () => {
-        axios.get(config.urls.startAllPricing)
+        axios.get(config.urls.startAllPricing, { headers: { Authorization: `Bearer ${token}` } })
             .then(response => {
                 console.log(response.data);
                 fetchPricingState();
@@ -173,7 +183,7 @@ const PriceTicker = () => {
     };
 
     const pauseAllPricing = () => {
-        axios.get(config.urls.pauseAllPricing)
+        axios.get(config.urls.pauseAllPricing, { headers: { Authorization: `Bearer ${token}` } })
             .then(response => {
                 console.log(response.data);
                 fetchPricingState();
@@ -184,7 +194,7 @@ const PriceTicker = () => {
     };
 
     const fetchPricingState = () => {
-        axios.get(config.urls.pricingState)
+        axios.get(config.urls.pricingState, { headers: { Authorization: `Bearer ${token}` } })
             .then(response => {
                 setPricingState(response.data);
             })
@@ -211,22 +221,24 @@ const PriceTicker = () => {
     }, []);
 
     useEffect(() => {
-        // Fetch the list of currency pairs
-        axios.get(config.urls.ccyPairs)
-            .then(response => {
-                setCcyPairs(response.data);
-            })
-            .catch(error => {
-                console.error('Error fetching currency pairs:', error);
-            });
+        if (token) {
+            // Fetch the list of currency pairs
+            axios.get(config.urls.ccyPairs, { headers: { Authorization: `Bearer ${token}` } })
+                .then(response => {
+                    setCcyPairs(response.data);
+                })
+                .catch(error => {
+                    console.error('Error fetching currency pairs:', error);
+                });
 
-        // Fetch the pricing state
-        fetchPricingState();
-    }, []);
+            // Fetch the pricing state
+            fetchPricingState();
+        }
+    }, [token]);
 
     const startPricing = (ccyPair) => {
         // Call the startPricing API
-        axios.get(config.urls.startPricing, { params: { ccyPair } })
+        axios.get(config.urls.startPricing, { params: { ccyPair }, headers: { Authorization: `Bearer ${token}` } })
             .then(response => {
                 console.log(response.data);
                 fetchPricingState();
@@ -238,7 +250,7 @@ const PriceTicker = () => {
 
     const pausePricing = (ccyPair) => {
         // Call the pausePricing API
-        axios.get(config.urls.pausePricing, { params: { ccyPair } })
+        axios.get(config.urls.pausePricing, { params: { ccyPair }, headers: { Authorization: `Bearer ${token}` } })
             .then(response => {
                 console.log(response.data);
                 fetchPricingState();
@@ -312,45 +324,73 @@ const PriceTicker = () => {
     }));
 
     const renderBarCharts = () => {
-    return Object.keys(prices).map((ccyPair) => {
-        const ccyPairHistory = priceHistory[ccyPair] || [];
-        const barData = {
-            labels: ccyPairHistory.map((entry, index) => `Tick ${index + 1}`),
-            datasets: [
-                {
-                    label: 'Bid Prices',
-                    data: ccyPairHistory.map((entry) => entry.bid),
-                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                    barThickness: 10, // Adjust the bar thickness
-                },
-                {
-                    label: 'Ask Prices',
-                    data: ccyPairHistory.map((entry) => entry.ask),
-                    backgroundColor: 'rgba(153, 102, 255, 0.6)',
-                    barThickness: 10, // Adjust the bar thickness
-                },
-            ]
-        };
+        return Object.keys(prices).map((ccyPair) => {
+            const ccyPairHistory = priceHistory[ccyPair] || [];
+            const barData = {
+                labels: ccyPairHistory.map((entry, index) => `Tick ${index + 1}`),
+                datasets: [
+                    {
+                        label: 'Bid Prices',
+                        data: ccyPairHistory.map((entry) => entry.bid),
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                        barThickness: 10, // Adjust the bar thickness
+                    },
+                    {
+                        label: 'Ask Prices',
+                        data: ccyPairHistory.map((entry) => entry.ask),
+                        backgroundColor: 'rgba(153, 102, 255, 0.6)',
+                        barThickness: 10, // Adjust the bar thickness
+                    },
+                ]
+            };
 
-        const options = {
-            scales: {
-                x: {
-                    display: false // Hide the x-axis legend ticks
-                },
-                y: {
-                    beginAtZero: false
+            const options = {
+                scales: {
+                    x: {
+                        display: false // Hide the x-axis legend ticks
+                    },
+                    y: {
+                        beginAtZero: false
+                    }
                 }
-            }
-        };
+            };
 
-        return (
-            <div key={ccyPair} style={{ width: '300px', height: '200px', margin: '20px' }}>
-                <Typography variant="h6">{ccyPair}</Typography>
-                <Bar data={barData} options={options} />
-            </div>
-        );
-    });
-};
+            return (
+                <div key={ccyPair} style={{ width: '300px', height: '200px', margin: '20px' }}>
+                    <Typography variant="h6">{ccyPair}</Typography>
+                    <Bar data={barData} options={options} />
+                </div>
+            );
+        });
+    };
+
+    const handleSubscribe50Users = async () => {
+        for (let i = 1; i <= 50; i++) {
+            const userId = `user${i}`;
+            try {
+                const response = await axios.post(`${config.urls.login}`, { userId: userId.trim() }, {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const token = response.data.token;
+                await axios.get(config.urls.startAllPricing, { headers: { Authorization: `Bearer ${token}` } });
+
+                // Create an SSE connection for each user
+                const eventSource = new EventSource(`${config.urls.sse}?userId=${userId}`);
+                eventSource.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    console.log(`User ${userId} received data:`, data);
+                };
+                eventSource.onerror = (err) => {
+                    console.error(`User ${userId} encountered an error:`, err);
+                    eventSource.close();
+                };
+            } catch (error) {
+                console.error(`Failed to subscribe and start pricing for ${userId}:`, error);
+            }
+        }
+    };
 
     return (
         <Container>
@@ -365,8 +405,8 @@ const PriceTicker = () => {
                 fullWidth
                 margin="normal"
                 error={userId.trim() === ''}
-                InputLabelProps={{className: 'font-weight-bold'}}
-                InputProps={{className: 'font-weight-bold'}}
+                InputLabelProps={{ className: 'font-weight-bold' }}
+                InputProps={{ className: 'font-weight-bold' }}
             />
             {userId.trim() === '' && (
                 <FormHelperText className={`${classes.helperText} font-weight-bold`} error>
@@ -399,6 +439,14 @@ const PriceTicker = () => {
                 >
                     Pause All
                 </Button>
+                <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleSubscribe50Users}
+                    className={`${classes.button} font-weight-bold`}
+                >
+                    Subscribe 50 Users and Start All Pricing
+                </Button>
                 {connectionClosed && (
                     <Button
                         variant="contained"
@@ -407,7 +455,7 @@ const PriceTicker = () => {
                         className={`${classes.button} font-weight-bold`}
                     >
                         Reconnect
-                        {isReconnecting && <CircularProgress size={20} className={classes.spinner}/>}
+                        {isReconnecting && <CircularProgress size={20} className={classes.spinner} />}
                     </Button>
                 )}
             </div>
@@ -422,11 +470,14 @@ const PriceTicker = () => {
                 label="Don't Reconnect"
             />
             <div className={classes.gridContainer}>
-                <div className="ag-theme-alpine" style={{height: 400, width: '80%'}}>
+                <div className="ag-theme-alpine" style={{ height: 400, width: '80%' }}>
                     <AgGridReact
                         columnDefs={columns}
                         rowData={rowData}
-                        frameworkComponents={{changeRenderer: ChangeRenderer}}
+                        frameworkComponents={{ changeRenderer: ChangeRenderer }}
+                        suppressScrollOnNewData={true}
+                        deltaRowDataMode={true}
+                        getRowNodeId={(data) => data.ccyPair}
                     />
                 </div>
             </div>
@@ -437,7 +488,7 @@ const PriceTicker = () => {
                     Update Speed: {ticksPerSecond} ticks per second
                 </Typography>
             </Paper>
-            <div style={{display: 'flex', flexWrap: 'wrap'}}>
+            <div style={{ display: 'flex', flexWrap: 'wrap' }}>
                 {renderBarCharts()}
             </div>
         </Container>
