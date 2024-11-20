@@ -1,4 +1,4 @@
-const host = 'https://localhost';
+const host = 'http://localhost';
 const port = '8080';
 
 const config = {
