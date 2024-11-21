@@ -80,3 +80,16 @@ This project is a real-time price ticker application built with React for the fr
 - **Start/Pause Buttons**: Buttons to start or pause pricing for individual or all currency pairs.
 - **Price Grid**: Displays the current bid and ask prices for each currency pair.
 - **Historical Data Charts**: Displays historical price data in bar charts.
+
+
+
+## Notes
+
+- Ensure that the backend server is running before starting the frontend application.
+- The application uses Server-Sent Events (SSE) for real-time updates.
+- The frontend application is built with React and uses Material-UI for styling and AG Grid for displaying data.
+
+
+npm install electron --save-dev
+
+npm install concurrently wait-on --save-dev

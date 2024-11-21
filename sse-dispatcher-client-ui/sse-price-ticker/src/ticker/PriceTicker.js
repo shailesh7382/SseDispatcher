@@ -116,6 +116,9 @@ const PriceTicker = () => {
                 });
 
                 setTicks((prevTicks) => prevTicks + 1);
+
+                // Trigger notification
+                window.electron.notify(`New price for ${ccyPair}: Bid ${bid}, Ask ${ask}`);
             }
         } catch (e) {
             console.error('Failed to parse event data:', e);

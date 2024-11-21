@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 public class Pricer {
     private static final BigDecimal MAX_VARIATION = BigDecimal.valueOf(0.01);
     private static final int THREAD_POOL_SIZE = 3;
-    private static final int MAX_DELAY_MS = 1000;
+    private static final int MAX_DELAY_MS = 10;
 
     private final List<PriceSubscriber> subscribers;
     private final ScheduledExecutorService scheduler;
