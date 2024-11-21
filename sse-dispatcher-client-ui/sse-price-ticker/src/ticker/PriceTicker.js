@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Container, Typography, TextField, Button, FormHelperText, CircularProgress, Paper, FormControlLabel, Checkbox, Alert, IconButton } from '@mui/material';
 import { makeStyles } from '@mui/styles';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -68,19 +68,19 @@ const PriceTicker = () => {
     const [ccyPairs, setCcyPairs] = useState([]);
     const [pricingState, setPricingState] = useState({});
     const [token, setToken] = useState('token');
-    const eventSourceRef = useRef(null);
+    const eventSourceRef = useRef(null); // Define eventSourceRef
 
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    const handleOpen = () => {
+    const handleOpen = useCallback(() => {
         setConnectionClosed(false);
         setStartTime(Date.now());
         setTicks(0);
         setReconnectAttempts(0);
         setIsReconnecting(false);
-    };
+    }, []);
 
-    const handleMessage = (event) => {
+    const handleMessage = useCallback((event) => {
         try {
             const data = JSON.parse(event.data);
             if (data.error) {
@@ -120,9 +120,9 @@ const PriceTicker = () => {
         } catch (e) {
             console.error('Failed to parse event data:', e);
         }
-    };
+    }, []);
 
-    const handleError = async (err) => {
+    const handleError = useCallback(async (err) => {
         try {
             const errorData = JSON.parse(err.data);
             setError(errorData.message || 'EventSource failed.');
@@ -130,8 +130,9 @@ const PriceTicker = () => {
             setError('EventSource failed: ' + err);
         }
         setConnectionClosed(true);
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+        if (eventSourceRef.current) {
+            eventSourceRef.current.close();
+        }
 
         if (!dontReconnect && reconnectAttempts < config.maxReconnectAttempts) {
             setIsReconnecting(true);
@@ -143,16 +144,16 @@ const PriceTicker = () => {
             setError('Maximum reconnection attempts reached.');
             setIsReconnecting(false);
         }
-    };
+    }, [dontReconnect, reconnectAttempts]);
 
-    const createEventSource = async () => {
+    const createEventSource = useCallback(() => {
         const eventSource = new EventSource(`${config.urls.sse}?userId=${userId}`);
         eventSourceRef.current = eventSource;
 
         eventSource.onopen = handleOpen;
         eventSource.onmessage = handleMessage;
         eventSource.onerror = handleError;
-    };
+    }, [userId, handleOpen, handleMessage, handleError]);
 
     const handleSubscribe = async () => {
         if (userId.trim() !== '') {
@@ -171,7 +172,7 @@ const PriceTicker = () => {
         }
     };
 
-    const startAllPricing = () => {
+    const startAllPricing = useCallback(() => {
         axios.get(config.urls.startAllPricing, { headers: { Authorization: `Bearer ${token}` } })
             .then(response => {
                 console.log(response.data);
@@ -180,9 +181,9 @@ const PriceTicker = () => {
             .catch(error => {
                 console.error('Error starting all pricing:', error);
             });
-    };
+    }, [token]);
 
-    const pauseAllPricing = () => {
+    const pauseAllPricing = useCallback(() => {
         axios.get(config.urls.pauseAllPricing, { headers: { Authorization: `Bearer ${token}` } })
             .then(response => {
                 console.log(response.data);
@@ -191,9 +192,9 @@ const PriceTicker = () => {
             .catch(error => {
                 console.error('Error pausing all pricing:', error);
             });
-    };
+    }, [token]);
 
-    const fetchPricingState = () => {
+    const fetchPricingState = useCallback(() => {
         axios.get(config.urls.pricingState, { headers: { Authorization: `Bearer ${token}` } })
             .then(response => {
                 setPricingState(response.data);
@@ -201,7 +202,7 @@ const PriceTicker = () => {
             .catch(error => {
                 console.error('Error fetching pricing state:', error);
             });
-    };
+    }, [token]);
 
     useEffect(() => {
         console.log('Previous prices updated:', prevPrices);
@@ -213,16 +214,7 @@ const PriceTicker = () => {
     const ticksPerSecond = (ticks / elapsedTime).toFixed(2);
 
     useEffect(() => {
-        return () => {
-            if (eventSourceRef.current) {
-                eventSourceRef.current.close();
-            }
-        };
-    }, []);
-
-    useEffect(() => {
         if (token) {
-            // Fetch the list of currency pairs
             axios.get(config.urls.ccyPairs, { headers: { Authorization: `Bearer ${token}` } })
                 .then(response => {
                     setCcyPairs(response.data);
@@ -231,13 +223,11 @@ const PriceTicker = () => {
                     console.error('Error fetching currency pairs:', error);
                 });
 
-            // Fetch the pricing state
             fetchPricingState();
         }
-    }, [token]);
+    }, [token, fetchPricingState]);
 
-    const startPricing = (ccyPair) => {
-        // Call the startPricing API
+    const startPricing = useCallback((ccyPair) => {
         axios.get(config.urls.startPricing, { params: { ccyPair }, headers: { Authorization: `Bearer ${token}` } })
             .then(response => {
                 console.log(response.data);
@@ -246,10 +236,9 @@ const PriceTicker = () => {
             .catch(error => {
                 console.error('Error starting pricing:', error);
             });
-    };
+    }, [token, fetchPricingState]);
 
-    const pausePricing = (ccyPair) => {
-        // Call the pausePricing API
+    const pausePricing = useCallback((ccyPair) => {
         axios.get(config.urls.pausePricing, { params: { ccyPair }, headers: { Authorization: `Bearer ${token}` } })
             .then(response => {
                 console.log(response.data);
@@ -258,7 +247,7 @@ const PriceTicker = () => {
             .catch(error => {
                 console.error('Error pausing pricing:', error);
             });
-    };
+    }, [token, fetchPricingState]);
 
     const highlightChangedDigits = (current, previous, reverse = false) => {
         if (!previous) return current;
@@ -269,9 +258,9 @@ const PriceTicker = () => {
         const digits = currentStr.split('').map((char, index) => {
             let style = {};
             if (index === currentStr.length - 1) {
-                style = { fontSize: '0.75em' }; // Decrease font size for the last digit
+                style = { fontSize: '0.75em' };
             } else if (index === currentStr.length - 3 || index === currentStr.length - 2) {
-                style = { fontSize: '1.25em' }; // Increase font size for the 2nd and 3rd decimal places
+                style = { fontSize: '1.25em' };
             }
 
             if (char !== previousStr[index]) {
@@ -291,14 +280,14 @@ const PriceTicker = () => {
             field: 'bid',
             cellRenderer: (params) => highlightChangedDigits(params.value, prevPrices[params.data.ccyPair]?.bid),
             cellStyle: { textAlign: 'right' },
-            width: 100 // Reduce the width of the Bid column
+            width: 100
         },
         {
             headerName: 'Ask',
             field: 'ask',
             cellRenderer: (params) => highlightChangedDigits(params.value, prevPrices[params.data.ccyPair]?.ask, true),
             cellStyle: { textAlign: 'left' },
-            width: 100 // Reduce the width of the Ask column
+            width: 100
         },
         {
             headerName: 'Action',
@@ -333,25 +322,21 @@ const PriceTicker = () => {
                         label: 'Bid Prices',
                         data: ccyPairHistory.map((entry) => entry.bid),
                         backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                        barThickness: 10, // Adjust the bar thickness
+                        barThickness: 10,
                     },
                     {
                         label: 'Ask Prices',
                         data: ccyPairHistory.map((entry) => entry.ask),
                         backgroundColor: 'rgba(153, 102, 255, 0.6)',
-                        barThickness: 10, // Adjust the bar thickness
+                        barThickness: 10,
                     },
                 ]
             };
 
             const options = {
                 scales: {
-                    x: {
-                        display: false // Hide the x-axis legend ticks
-                    },
-                    y: {
-                        beginAtZero: false
-                    }
+                    x: { display: false },
+                    y: { beginAtZero: false }
                 }
             };
 
@@ -376,7 +361,6 @@ const PriceTicker = () => {
                 const token = response.data.token;
                 await axios.get(config.urls.startAllPricing, { headers: { Authorization: `Bearer ${token}` } });
 
-                // Create an SSE connection for each user
                 const eventSource = new EventSource(`${config.urls.sse}?userId=${userId}`);
                 eventSource.onmessage = (event) => {
                     const data = JSON.parse(event.data);
